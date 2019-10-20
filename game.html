@@ -1,0 +1,480 @@
+
+<html>
+  <head>
+    <script src="./pixi/dist/pixi.min.js"></script>
+    <script src="./bump/bin/bump.js"></script>
+    <script src="./sound/sound.js"></script>
+    <style>
+      *{
+        padding: 0px;
+        margin: 0px;
+      }
+      body{
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="text/javascript">
+      let type = "WebGL";
+      PIXI.utils.sayHello(type);
+      let app = new PIXI.Application({width:window.innerWidth, height:window.innerHeight});
+
+      const BUMP = new Bump(PIXI);
+      document.body.appendChild(app.view);
+
+      // ---------------------------------------------------------------------------------------------------
+      // custom keyboard handler, very handy piece of code
+            function keyboard(keyCode) {
+              let key = {};
+              key.code = keyCode;
+              key.isDown = false;
+              key.isUp = true;
+              key.press = undefined;
+              key.release = undefined;
+              key.downHandler = event => {
+                if (event.keyCode === key.code) {
+                  if (key.isUp && key.press) key.press();
+                  key.isDown = true;
+                  key.isUp = false;
+
+                }
+                event.preventDefault();
+              };
+              key.upHandler = event => {
+                if (event.keyCode === key.code) {
+                  if (key.isDown && key.release) key.release();
+                  key.isDown = false;
+                  key.isUp = true;
+                }
+                event.preventDefault();
+              };
+
+              window.addEventListener(
+                "keydown", key.downHandler.bind(key), false
+              );
+              window.addEventListener(
+                "keyup", key.upHandler.bind(key), false
+              );
+              return key;
+            }
+      // ---------------------------------------------------------------------------------------------
+
+      let paddle, ball, wallLeft, wallRight, wallTop, brick, powerup, powerupOnScreen; let wallThickness = 2; let lives = 3; let main; let message; let ranOnce = false; let foo = 0; let selectedID; let livesMessage; let brickHitSound, wallHitSound, lostSound, winSound;
+      let state; let bricks = []; let brickHeight = 40, brickWidth = 140; let totalBricks = 16; let paddleSpeed = 10; let lifeIcon; let score, scoreMessage; let winMessage; let reloadMessage;
+      PIXI.loader.add("./images/paddle.png").add("./images/ball.png").add("./images/side.png").add("./images/sideTop.png").add("./images/brickRed.png").add("./images/brickYellow.png").add("./images/brickGreen.png").add("./images/brickBlue.png").add("./images/plus.png").load(setup);
+
+      sounds.load(["./sound/brick.mp3","./sound/lost.mp3","./sound/pop.mp3","./sound/tada.mp3"]);
+      sounds.whenLoaded = soundSetup;
+      function soundSetup(){
+        brickHitSound = sounds["./sound/brick.mp3"];
+        wallHitSound = sounds["./sound/pop.mp3"];
+        lostSound = sounds["./sound/lost.mp3"];
+        winSound = sounds["./sound/tada.mp3"];
+      }
+
+
+      function ballCreator(){
+        ball = new PIXI.Sprite(PIXI.loader.resources["./images/ball.png"].texture);
+        app.stage.addChild(ball);
+      };
+
+      function paddleCreator(){
+        paddle = new PIXI.Sprite(PIXI.loader.resources["./images/paddle.png"].texture);
+        app.stage.addChild(paddle);
+        paddle.vx = 0; paddle.height = 20; paddle.width = 180;
+      };
+
+      function wallsCreator(){
+        wallLeft = new PIXI.Sprite(PIXI.loader.resources["./images/side.png"].texture);
+        app.stage.addChild(wallLeft);
+        wallLeft.height = window.innerHeight;
+
+        wallRight = new PIXI.Sprite(PIXI.loader.resources["./images/side.png"].texture);
+        app.stage.addChild(wallRight);
+        wallRight.height = window.innerHeight;
+        wallRight.x = window.innerWidth - wallThickness;
+
+        wallTop = new PIXI.Sprite(PIXI.loader.resources["./images/sideTop.png"].texture);
+        app.stage.addChild(wallTop);
+        wallTop.width = window.innerWidth;
+      };
+
+      let hackson = false;
+
+      function powerupCreator(hitBrick){
+        //let rnum = Math.floor(Math.random() * 4);
+        let rnum = 2;
+        if(hitBrick.points === 10){
+          if(rnum === 2){
+            powerup = new PIXI.Sprite(PIXI.loader.resources["./images/plus.png"].texture);
+            powerup.scale.set(0.5,0.5);
+            powerup.y = hitBrick.y;
+            powerup.x = hitBrick.x + (brickWidth/2);
+            powerupOnScreen = true;
+            app.stage.addChild(powerup);
+          }
+        }
+      }
+
+
+
+      function scorecardCreator(){
+        let scoreStyle = new PIXI.TextStyle({
+          fontFamily : "Arial",
+          fill : "white",
+          fontSize: 30
+        });
+        score = 0;
+        scoreMessage = new PIXI.Text(score.toString(),scoreStyle);
+        app.stage.addChild(scoreMessage);
+        scoreMessage.x = window.innerWidth - wallThickness - 70;
+        scoreMessage.y = wallThickness + 20;
+      }
+      function livesMessageCreator(){
+        let livesMessageStyle = new PIXI.TextStyle({
+          fontFamily : "Arial",
+          fill : "white",
+          fontSize: 30
+        });
+        livesMessage = new PIXI.Text("Lives: " + lives,livesMessageStyle);
+        app.stage.addChild(livesMessage);
+        livesMessage.x = 50;
+        livesMessage.y = 35;
+      }
+
+
+      function setup(){
+
+        if(!ranOnce){
+          paddleCreator();
+          ballCreator();
+          wallsCreator();
+          scorecardCreator();
+          livesMessageCreator();
+          ballSpeedRandomiser();
+        }
+        paddleSpeed = 10;
+
+        //lifeIcon = new PIXI.Sprite(PIXI.loader.resources["./images/life.png"].texture);
+        //app.stage.addChild(lifeIcon);
+        //lifeIcon.x = 200; lifeIcon.y = 200;
+
+
+        let startPercents = [
+          {x : 0.0781, y : 0.142, startID : 1}, {x : 0.0781, y : 0.782, startID : 2}, {x : 0.921, y : 0.142, startID : 3}, {x : 0.921, y : 0.782, startID : 4}
+        ];
+
+        function randomStartLocation(){
+          let q = Math.floor(Math.random() * 4);
+          ball.x = Math.floor(startPercents[q].x * window.innerWidth);
+          ball.y = Math.floor(startPercents[q].y * window.innerHeight);
+          selectedID = startPercents[q].startID;
+        }
+
+        randomStartLocation();
+
+        function ballSpeedRandomiser(){
+          if(selectedID === 2 || selectedID === 4){
+            let q = Math.floor(Math.random() * 5) + 4;
+            ball.vy = -q;
+            let flip = Math.random();
+            if(flip > 0.5){
+              let p = Math.floor(Math.random() * 5) + 4;
+              ball.vx = p;
+            }
+            else{
+              let p = Math.floor(Math.random() * 5) + 4;
+              ball.vx = -p;
+            }
+          }
+          else{
+            let flip = Math.random();
+            if(flip > 0.5){
+              let p = Math.floor(Math.random() * 5) + 4;
+              ball.vx = p;
+            }
+            else{
+              let p = Math.floor(Math.random() * 5) + 4;
+              ball.vx = -p;
+            }
+            flip = Math.random();
+            if(flip > 0.5){
+              let p = Math.floor(Math.random() * 5) + 4;
+              ball.vy = p;
+            }
+            else{
+              let p = Math.floor(Math.random() * 5) + 4;
+              ball.vy = -p;
+            }
+          }
+          /*let p = Math.floor(Math.random() * 5) + 4;
+          ball.vx = p;
+          let q = Math.floor(Math.random() * 5) + 4;
+          ball.vy = -q;*/
+        }
+
+
+        paddle.x = Math.floor((window.innerWidth - paddle.width) / 2);
+        paddle.y = window.innerHeight - paddle.height;
+
+        bricks = [];
+
+        for(let i = 0; i < 16; i++){
+          let random = Math.floor(Math.random() * 4);
+          switch(random){
+            case 0: bricks[i] = new PIXI.Sprite(PIXI.loader.resources["./images/brickBlue.png"].texture); bricks[i].points = 40; break;
+            case 1: bricks[i] = new PIXI.Sprite(PIXI.loader.resources["./images/brickGreen.png"].texture); bricks[i].points = 30; break;
+            case 2: bricks[i] = new PIXI.Sprite(PIXI.loader.resources["./images/brickRed.png"].texture); bricks[i].points = 20; break;
+            case 3: bricks[i] = new PIXI.Sprite(PIXI.loader.resources["./images/brickYellow.png"].texture); bricks[i].points = 10; break;
+          }
+        }
+
+        for(let p = 0; p < 16; p++){
+          app.stage.addChild(bricks[p]);
+        }
+
+        let yPosition = 130; let counter = 0;
+        for(let i = 0; i < 4; i++){
+          let xPosition = Math.floor((window.innerWidth - (2 * wallThickness)) * 0.27);
+          for(let j = 0; j < 4; j++){
+            bricks[counter].x = xPosition;
+            bricks[counter].y = yPosition;
+            xPosition += brickWidth + 10;
+            counter++;
+          }
+          yPosition += brickHeight + 10;
+        }
+
+        state = pregame;
+
+        main = (delta) => gameLoop(delta);
+        app.ticker.add(main);
+        ball.circular = true;
+
+
+        let messageNum = 3;
+
+        let messageStyle = new PIXI.TextStyle({
+          fontFamily : "Arial",
+          fill : "white",
+          fontSize: 30
+        });
+
+        message = new PIXI.Text(messageNum.toString(),messageStyle);
+
+        app.stage.addChild(message);
+        message.x = Math.floor((window.innerWidth - messageStyle.fontSize) / 2);
+        message.y = Math.floor(window.innerHeight * 0.711);
+
+        function messageChanger(){
+          if(lives != 0){
+            messageNum--;
+            if(messageNum === 0){
+              clearInterval(preTimer);
+              state = play;
+              //ball.vx = 7;
+              //ball.vy = -7;
+              ballSpeedRandomiser();
+              app.stage.removeChild(message);
+              messageNum = 3;
+              //app.stage.removeChild(winMessage);
+            }
+            else{
+              message.text = messageNum.toString();
+            }
+          }
+        }
+        let preTimer = setInterval(messageChanger,1000);
+
+
+        //ball.vx = 7; ball.vy = -7;
+
+      }//end of setup function
+
+      function hacked(bool){
+        if(bool){
+          paddle.x = ball.x;
+        }
+      }
+
+      function containOriginal(sprite, container) {
+        let collision = undefined;
+        if (sprite.x < container.x) {
+          sprite.x = container.x;
+          collision = "left";
+        }
+        if (sprite.y < container.y) {
+          sprite.y = container.y;
+          collision = "top";
+        }
+        if (sprite.x + sprite.width > container.width) {
+          sprite.x = container.width - sprite.width;
+          collision = "right";
+        }
+        if (sprite.y + sprite.height > container.height) {
+          sprite.y = container.height - sprite.height;
+          collision = "bottom";
+        }
+        return collision;
+      }
+
+      let v1 = 0, v2 = 0, v3 = 0; // code logic by Parth.
+
+      let left = keyboard(37);
+      left.press = () => {v1 = -paddleSpeed; v3 = -paddleSpeed;}
+      left.release = () => {v1 = 0;}
+
+      let right = keyboard(39);
+      right.press = () => {v2 = paddleSpeed; v3 = paddleSpeed;}
+      right.release = () => {v2 = 0;}
+
+      let spacebarReload = keyboard(32);
+      spacebarReload.press = () => {location.reload(true);}
+      spacebarReload.release = () => {console.log("reload");}
+
+      let godmod = keyboard(53);
+      godmod.press = () => {hackson = true};
+      godmod.release = () => {hackson = false};
+
+      function gameLoop(delta) {
+        state(delta);
+      }
+
+      function pregame(delta){
+        ball.vx = 0;
+        ball.vy = 0;
+      }
+
+      function lost(){
+        if(lives === 0){
+
+          app.stage.addChild(message);
+          message.x -= 70;
+          message.text = "Game Over...";
+          livesMessage.text = "Lives: " + lives;
+          app.ticker.stop();
+          let reloadMessageStyle = new PIXI.TextStyle({
+            fontFamily : "Arial",
+            fill : "white",
+            fontSize: 30
+          });
+          reloadMessage = new PIXI.Text("Press Spacebar to Reload",reloadMessageStyle);
+          app.stage.addChild(reloadMessage);
+          reloadMessage.y = Math.floor(window.innerHeight * 0.77);
+          reloadMessage.x = Math.floor(window.innerWidth * 0.37);
+        }
+        else{
+          for(let i = 0; i < totalBricks; i++){
+            app.stage.removeChild(bricks[i]);
+            }
+          bricks = null;
+          totalBricks = 16;
+          livesMessage.text = "Lives: " + lives;
+          setup();
+        }
+      }
+
+      function luckChange(){
+        let n = Math.floor(Math.random() * 8);
+        switch(n){
+          case 0: foo++; break;
+          case 1: ball.vx -= 2; break;
+          case 2: foo++; break;
+          case 3: ball.vy += 1; break;
+          case 4: foo++; break;
+          case 5: ball.vx += 1; break;
+          case 6: foo++; break;
+          case 7: ball.vy -= 2; break;
+        }
+      }
+
+
+      function win(){
+        app.ticker.remove(main);
+        /*let winMessageStyle = new PIXI.TextStyle({
+          fontFamily : "Arial",
+          fill : "white",
+          fontSize: 30
+        });
+        winMessage = new PIXI.Text("Round Complete!! Next Round",winMessageStyle);
+        app.stage.addChild(winMessage);
+        winMessage.y = 100;
+        winMessage.x = window.innerWidth - 50;*/
+        for(let i = 0; i < totalBricks; i++){
+          app.stage.removeChild(bricks[i]);
+        }
+        bricks = null;
+        totalBricks = 16;
+        setup();
+
+      };
+
+      function play(delta){
+        if((v1 + v2 === 0) && v1 != 0 && v2 != 0){paddle.vx = v3;} // code logic by parth
+        else {paddle.vx = v1 + v2;}
+        hacked(hackson);
+        paddle.x += paddle.vx;
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        containOriginal(paddle,{x:0 ,y: window.innerHeight - paddle.height, width: window.innerWidth, height: window.innerHeight});
+
+        containOriginal(wallLeft,{x:0, y:0, width: wallThickness, height: window.innerHeight});
+
+        //containOriginal(wallRight,{x: window.innerWidth - 10, y: 0, width: 10, height: window.innerHeight});
+
+        containOriginal(wallTop,{x: 0, y: 0, width: window.innerWidth, height: wallThickness});
+
+        //sound stuff
+
+        BUMP.hit(ball,paddle,true,true,false,()=>{wallHitSound.play();});
+        BUMP.hit(ball,wallLeft,true,true,false,()=>{wallHitSound.play();});
+        BUMP.hit(ball,wallRight,true,true,false,()=>{wallHitSound.play();});
+        BUMP.hit(ball,wallTop,true,true,false,()=>{wallHitSound.play();});
+
+        //collision control
+
+        for(let p = 0; p < totalBricks; p++){
+          BUMP.hit(ball,bricks[p],true,true,false,function(){
+            brickHitSound.play();
+            score += bricks[p].points;
+            scoreMessage.text = score.toString();
+
+            //powerupCreator(bricks[p]);
+            //if(powerupOnScreen){powerup.y += powerup.vy; console.log("falling");}
+
+            app.stage.removeChild(bricks[p]);
+            bricks.splice(p,1);
+            totalBricks--;
+            if(ball.vx > 0){ball.vx++;} else if(ball.vx < 0){ball.vx--;}
+            if(ball.vy > 0){ball.vy++;} else if(ball.vy < 0){ball.vy--;}
+            paddleSpeed += 0.7;
+            luckChange();
+          });
+        }
+
+        if(totalBricks === 0){
+          winSound.play();
+          ball.vx = 0; ball.vy = 0;
+          message.text = "Round Complete";
+          ranOnce = true;
+          win();
+        }
+        if(ball.y > window.innerHeight + 10){
+          lostSound.play();
+          ranOnce = true;
+
+          lives--;
+          lost();
+          app.ticker.remove(main);
+        }
+
+      }
+
+      console.log("\n" + "%c brickBreaker - VB ", "background: rgb(240,100,0); color: rgb(240,240,0); font-size: 14px; font-family: 'Courier New'; border: 1px dashed black; padding-top : 4px; padding-bottom : 4px; font-weight: 500;");
+      //console.log(window.innerWidth);
+      //console.log(window.innerHeight);
+    </script>
+  </body>
+</html>
