@@ -7,7 +7,7 @@ PixiJS runs only on a webserver, so following are the steps to set up a simple w
 2. [Download](https://github.com/VedantBang/brickBreaker/archive/master.zip) the contents of this repository and save them in a suitable destination on your computer.
 3. Open up the terminal/command line on your machine and navigate to the directory where the game is stored. (If you are new to the terminal, I would recommend [this](https://medium.com/@zibon/basic-linux-command-lines-to-get-started-developing-in-ubuntu-linux-b54def1c2190) tutorial.)
 4. We shall be using a NodeJS package called "http-server" to set up our own local webserver. Download the package by using the command ``npm install -g http-server`` on your terminal window.
-5. We are almost there! Now we will be running the server. Type in ``http-server`` in the terminal. Make sure that you in are the directory which contains the game files.
+5. We are almost there! Now we will be running the server. Type ``http-server`` in the terminal. Make sure that you are in the directory which contains the game files.
 6. If everything goes fine, you should get an output simlilar to this.
  
 ```
